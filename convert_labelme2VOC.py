@@ -1,18 +1,19 @@
 from glob import glob
 from typing import List, Tuple
-import os, json, re
+import os, json, re, cv2, numpy as np
 import os.path as osp
 import xml.etree.ElementTree as ET
 # from xml.dom.minidom import parseString
 from xml.dom.expatbuilder import parseString
-import cv2
-import numpy as np
+
+
 # tạo file label.txt để input cho labelme2voc.py
 datafolder = '/home/agent/Documents/graph/GNN_introduction/dataset'
 labels = ['__ignore__', '_background_']
 
 
 def get_shape_info(jsonp:str) -> List[Tuple[int, int, int, int, str]]:
+    """ read json annotation file from labelme and caculus bnbox """
     with open(jsonp, 'r') as f:
         data = json.load(f)
     shapes = data['shapes']
@@ -33,7 +34,8 @@ def get_shape_info(jsonp:str) -> List[Tuple[int, int, int, int, str]]:
         boxes.append((xmin, ymin, xmax, ymax, lbl))
     
     return boxes
-    
+
+
 def save_file_xml(img:np.ndarray, abspath:str, folder_save:str, boxes:list) -> None:
     r"""    img     opencv
         abspath     đường dẫn đầy đủ của ảnh
