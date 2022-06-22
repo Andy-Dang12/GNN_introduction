@@ -1,5 +1,5 @@
 from glob import glob
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import os, json, re, cv2, numpy as np
 import os.path as osp
 import xml.etree.ElementTree as ET
@@ -10,9 +10,10 @@ from xml.dom.expatbuilder import parseString
 # tạo file label.txt để input cho labelme2voc.py
 datafolder = '/home/agent/Documents/graph/GNN_introduction/dataset'
 labels = ['__ignore__', '_background_']
+BoxInfo = Tuple[int, int, int, int, str]
 
 
-def get_shape_info(jsonp:str) -> List[Tuple[int, int, int, int, str]]:
+def get_shape_info(jsonp:str) -> List[BoxInfo]:
     """ read json annotation file from labelme and caculus bnbox """
     with open(jsonp, 'r') as f:
         data = json.load(f)
@@ -120,9 +121,31 @@ def convert_Labelme2VOC(datafolder:str):
     
     #NOTE create labels.txt contain label name of dataset
     with open(osp.join(datafolder, 'labels.txt'), 'w') as f:
-        f.write('\n'.join(labels))
+        f.write('\n'.join(sorted(labels)))
 
 
+def voc2yolo(box:BoxInfo, imgwid:int, imghei:int ,class2idx:Dict[str, int]):
+    xcenter = (box[0] + box[2]) / 2.
+    ycenter = (box[1] + box[3]) / 2.
+    bnbwid = box[2] - box[0]  
+    ...
+
+
+def convert_Labelme2YOLO(datafolder:str):
+    jsons = glob(osp.join(datafolder, '*.json'))
+    for js in jsons:
+        boxes = get_shape_info(js)
+        imgp = re.sub('.json$', '.jpg', js)
+        gray = cv2.imread(imgp, 0)
+        hei, wid = gray.shape
+        
+        print(js)
+        
+    #NOTE create labels.txt contain label name of dataset
+    with open(osp.join(datafolder, 'classes.txt'), 'w') as f:
+        f.write('\n'.join(sorted(labels)))
+        
+        
 if __name__ == '__main__':
     datafolder = '/home/agent/Documents/graph/GNN/dataset'
     convert_Labelme2VOC(datafolder)
