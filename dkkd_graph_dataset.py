@@ -127,12 +127,7 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
     return lbls
 
 
-def image2word(img:np.ndarray) -> str:
-    r"""
-    from image , using OCR, convert to str
-    """
-    word = ''
-    return word
+from vietOCR import image2word
 
 def word2vec(single_word:str) -> torch.Tensor:
     r"""
