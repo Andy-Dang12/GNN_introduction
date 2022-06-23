@@ -41,6 +41,32 @@ def class_2_idx(classname:str):
     return class_to_idx[classname]
 
 
+def sorted_VOCbox(boxes:List[VOCBox]) -> List[List[VOCBox]]:
+    def _get_line_center_x2(box:VOCBox) -> int:
+        return box[1] + box[3]
+    
+    #NOTE sort by ymin/ymax/ycenter from low to high
+    boxes = sorted(boxes, key=lambda x:(x[1] + x[3]))
+    
+    lines = []
+    line  = [boxes[0]]
+    linecenter_x2 = _get_line_center_x2(boxes[0])
+    for box in boxes[1:]:
+        if 2*box[1] <= linecenter_x2:    #! thresshold
+            line.append(box)
+        
+        else:
+            lines.append(line.copy())
+            line = [box]
+        linecenter_x2 = _get_line_center_x2(box)
+        
+    lines.append(line)
+    
+    def _order_box_xmin(boxes:List[VOCBox]) -> List[VOCBox]:
+        return sorted(boxes, key= lambda x: x[0])
+    
+    return [_order_box_xmin(l) for l in lines]
+
 def get_shape_info(jsonp:str) -> List[VOCBox]:
     """ read json annotation file from labelme and caculus bnbox """
     with open(jsonp, 'r') as f:
@@ -56,13 +82,13 @@ def get_shape_info(jsonp:str) -> List[VOCBox]:
         
         #NOTE points
         points = np.array(shape['points'])
-        xmin = round(points[:, 0].min())
-        ymin = round(points[:, 1].min())
-        xmax = round(points[:, 0].max())
-        ymax = round(points[:, 1].max())
+        xmin = points[:, 0].min()
+        ymin = points[:, 1].min()
+        xmax = points[:, 0].max()
+        ymax = points[:, 1].max()
         boxes.append((xmin, ymin, xmax, ymax, lbl))
-    
     return boxes
+    return sorted_VOCbox(boxes)
 
 
 def coordinateCvt2YOLO(size:Tuple[int, int], box:VOCCoor) -> YOLOCoor:
@@ -105,25 +131,52 @@ def image2word(img:np.ndarray) -> str:
     r"""
     from image , using OCR, convert to str
     """
+    word = ''
+    return word
 
-
-def word2vec(single_word:str) -> Any:
+def word2vec(single_word:str) -> torch.Tensor:
     r"""
     using pretrained PhoBERT convert single word to vecto
     how to use: 
     >>> word_feature = ...
     
     """
-    ...
+    word_embedding = torch.tensor([0, 0, 0, 0])
+    return word_embedding
 
 
 def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     r"""
     from coordinate and word
     """
-    boxes = get_shape_info(jsonp)
     image = cv2.imread(imgp, 0)
+    hei, wid = image.shape
+
+    boxes = get_shape_info(jsonp)
+    lineboxes = sorted_VOCbox(boxes)
+    def _create_edges(lineboxes) :
+        r"""
+        tạo các edges cho graph
+        !TODO 1 trong cùng 1 line , 1 edge sẽ link 2 nodes cạnh nhau
+        !TODO 2 đối với các box khác line, 1 edge sẽ link 2 node 
+        có overlap trong phạm vi ymin:ymax
+        """
     
+    def _create_node_feature(box:Union[VOCBox, VOCCoor], 
+                             image=image, wid=wid, hei=hei) -> torch.Tensor:
+        xmin, ymin, xmax, ymax = box[:4]
+        coor_embedding = coordinateCvt2YOLO(
+            size=(wid, hei), box=(xmin, ymin, xmax, ymax))
+        image_word = image[ymin:ymax, xmin:xmax]
+        word = image2word(image_word)
+        word_embedding = word2vec(word)
+        
+        return torch.cat([coor_embedding, word_embedding])    #!FIXME cvt 2 same type
+        
+    for line in lineboxes:
+        for box in line:
+            node_feature = _create_node_feature(box)
+    #TODO edges sẽ nối 1 box với tất cả các word 
 
 class DKKDGraphDataset(DGLDataset):
     def __init__(self, name:str, root:str):
