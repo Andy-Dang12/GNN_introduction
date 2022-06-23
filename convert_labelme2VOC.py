@@ -1,5 +1,5 @@
 from glob import glob
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Union
 import os, json, re, cv2, numpy as np
 import os.path as osp
 import xml.etree.ElementTree as ET
@@ -10,10 +10,11 @@ from xml.dom.expatbuilder import parseString
 # tạo file label.txt để input cho labelme2voc.py
 datafolder = '/home/agent/Documents/graph/GNN_introduction/dataset'
 labels = ['__ignore__', '_background_']
-BoxInfo = Tuple[int, int, int, int, str]
+Number = Union[int, float]
+VOCBox = Tuple[Number, Number, Number, Number, str]
 
 
-def get_shape_info(jsonp:str) -> List[BoxInfo]:
+def get_shape_info(jsonp:str) -> List[VOCBox]:
     """ read json annotation file from labelme and caculus bnbox """
     with open(jsonp, 'r') as f:
         data = json.load(f)
@@ -124,7 +125,7 @@ def convert_Labelme2VOC(datafolder:str):
         f.write('\n'.join(sorted(labels)))
 
 
-def voc2yolo(box:BoxInfo, imgwid:int, imghei:int ,class2idx:Dict[str, int]):
+def voc2yolo(box:VOCBox, imgwid:int, imghei:int ,class2idx:Dict[str, int]):
     xcenter = (box[0] + box[2]) / 2.
     ycenter = (box[1] + box[3]) / 2.
     bnbwid = box[2] - box[0]  
@@ -147,6 +148,6 @@ def convert_Labelme2YOLO(datafolder:str):
         
         
 if __name__ == '__main__':
-    datafolder = '/home/agent/Documents/graph/GNN/dataset'
+    datafolder = '/home/agent/Documents/graph/GNN/dataset/DKKD'
     convert_Labelme2VOC(datafolder)
     
