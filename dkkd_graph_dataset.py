@@ -1,37 +1,47 @@
-import json
-import os
+import os, re, json
 import os.path as osp
-import re
 import xml.etree.ElementTree as ET
 from glob import glob
-from typing import Dict, List, Tuple
-from urllib.request import urlretrieve
+from typing import Any, Dict, List, Tuple, Union
 # from xml.dom.minidom import parseString
 from xml.dom.expatbuilder import parseString
-
+from colorama import Fore
 import cv2
-import dgl
-import dgl.function as fn
 import numpy as np
 import pandas as pd
-import torch
+import torch, dgl
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from colorama import Fore
+import dgl.function as fn
 from dgl.data import DGLDataset
+from dgl import DGLGraph
 
-BoxInfo = Tuple[int, int, int, int, str]
-BoxCoor = Tuple[int, int, int, int]
+
+Number = Union[int, float]
+VOCBox = Tuple[Number, Number, Number, Number, str]
+VOCCoor = Tuple[Number, Number, Number, Number]
+YOLOBox = Tuple[int, float, float, float, float]
+YOLOCoor = Tuple[float, float, float, float]
+
 labels = ['__ignore__', '_background_']
-class_to_idx = {}
+
+def create_cls_to_idx(label_path:str) -> Tuple[list, Dict[str, int]]:
+    assert label_path.endswith('.txt')
+    with open(label_path, 'r') as f:
+        lines = f.read().strip().splitlines()
+    classes = [l for l in lines if l not in labels]
+    class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
+    return classes, class_to_idx
+
+classes, class_to_idx = create_cls_to_idx('dataset/DKKD/labels.txt')
 
 def class_2_idx(classname:str):
+    assert classname in class_to_idx.keys(), 'invalid classname'
     return class_to_idx[classname]
-    
-#TODO create label and class_to_idx
 
-def get_shape_info(jsonp:str) -> List[BoxInfo]:
+
+def get_shape_info(jsonp:str) -> List[VOCBox]:
     """ read json annotation file from labelme and caculus bnbox """
     with open(jsonp, 'r') as f:
         data = json.load(f)
@@ -55,7 +65,7 @@ def get_shape_info(jsonp:str) -> List[BoxInfo]:
     return boxes
 
 
-def coordinateCvt2YOLO(size:Tuple[int, int], box:BoxCoor):
+def coordinateCvt2YOLO(size:Tuple[int, int], box:VOCCoor) -> YOLOCoor:
     dw = 1. / size[0]
     dh = 1. / size[1]
 
@@ -72,28 +82,67 @@ def coordinateCvt2YOLO(size:Tuple[int, int], box:BoxCoor):
     return (round(x, 5), round(y, 5), round(w, 5), round(h, 5))
 
 
-def from_labelme2yolo(jsonp:str, imgp:str) -> str:
+def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
+    r"""
+    convert a annotation from labelme to yolo 
+    how to use: 
+    >>> label = YOLOBox[0]
+    >>> coor_feature = YOLOBox[1:]
+    """
     boxes = get_shape_info(jsonp)
     image = cv2.imread(imgp, 0)
     hei, wid = image.shape
+    lbls = []
     for box in boxes:
         yolobnb = coordinateCvt2YOLO(size=(wid, hei), box=box[:4])
         idx = class_2_idx(box[4])   #NOTE label
-        #TODO
+        lbls.append((idx, *yolobnb))
+        
+    return lbls
+
+
+def image2word(img:np.ndarray) -> str:
+    r"""
+    from image , using OCR, convert to str
+    """
+
+
+def word2vec(single_word:str) -> Any:
+    r"""
+    using pretrained PhoBERT convert single word to vecto
+    how to use: 
+    >>> word_feature = ...
+    
+    """
+    ...
+
+
+def build_graph(jsonp:str, imgp:str) -> DGLGraph:
+    r"""
+    from coordinate and word
+    """
+    boxes = get_shape_info(jsonp)
+    image = cv2.imread(imgp, 0)
+    
 
 class DKKDGraphDataset(DGLDataset):
-    def __init__(self):
-        super().__init__(name='karate_club')
+    def __init__(self, name:str, root:str):
+        super().__init__(name='DKKD')
+        self.jsons = glob(osp.join(root, '*.json'))
         
-    def __len__(self): return 1
-    def __getitem__(self, i): return self.graph
+    def __len__(self): 
+        return len(self.jsons)
+    
+    def __getitem__(self, idx:int) -> DGLGraph: 
+        js = self.jsons[idx]
+        imgp = re.sub('.json$', '.jpg', js)
+        assert osp.isfile(imgp), 'img is not exist'
+        
+        return build_graph(js, imgp)
     
     def process(self):
-        
-        
-        
-        
-        
+        #NOTE dataset gồm nhiều graph, mỗi ảnh sẽ tạo thành 1 graph
+
         #NOTE download data
         # urlretrieve('https://data.dgl.ai/tutorial/dataset/members.csv', './members.csv')
         # urlretrieve('https://data.dgl.ai/tutorial/dataset/interactions.csv', './interactions.csv')
