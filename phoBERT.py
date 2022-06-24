@@ -9,7 +9,7 @@ tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
 def word2vec(sentence:str) -> torch.Tensor:
     input_ids = torch.tensor([tokenizer.encode(sentence)])
     features = phobert(input_ids)  # Models outputs are now tuples
-    return features['pooler_output']
+    return features['pooler_output'].view(-1) #convert to 1d-tensor
 
 
 if __name__ == '__main__':
