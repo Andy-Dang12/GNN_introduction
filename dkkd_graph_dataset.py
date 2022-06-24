@@ -1,21 +1,22 @@
 import os, re, json
 import os.path as osp
-import xml.etree.ElementTree as ET
+# import xml.etree.ElementTree as ET
 from glob import glob
-from typing import Any, Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 # from xml.dom.minidom import parseString
-from xml.dom.expatbuilder import parseString
+# from xml.dom.expatbuilder import parseString
 from colorama import Fore
 import cv2
 import numpy as np
 import pandas as pd
 import torch, dgl
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import dgl.function as fn
+
 from dgl.data import DGLDataset
 from dgl import DGLGraph
+
+from vietOCR import img2word, imgs2words
+from phoBERT import word2vec
 
 
 Number = Union[int, float]
@@ -127,19 +128,6 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
     return lbls
 
 
-from vietOCR import img2word, imgs2words
-
-def word2vec(single_word:str) -> torch.Tensor:
-    r"""
-    using pretrained PhoBERT convert single word to vecto
-    how to use: 
-    >>> word_feature = ...
-    
-    """
-    word_embedding = torch.tensor([0, 0, 0, 0])
-    return word_embedding
-
-
 def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     r"""
     from coordinate and word
@@ -151,6 +139,48 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     lineboxes = sorted_VOCbox(boxes)
     
     #? đưa 2 function _create_edges và _create_node_feature ra ngoài build_graph 
+    
+    def _create_a_node_data(box:VOCBox, image:np.ndarray=image, 
+                               wid:int=wid, hei:int=hei) -> Tuple[torch.Tensor, int]:
+        xmin, ymin, xmax, ymax, lbl = box
+        coor_feat = coordinateCvt2YOLO(
+            size=(wid, hei), box=(xmin, ymin, xmax, ymax))
+        coor_feat = torch.tensor(coor_feat)
+        image_word = image[ymin:ymax, xmin:xmax]
+        word = img2word(image_word)
+        word_embedding = word2vec(word)
+        idx_class = class_2_idx(lbl)
+        
+         #!FIXME cvt 2 same type and 1d-tensor
+        return torch.cat((coor_feat, word_embedding)), idx_class
+    
+    def _create_nodes_data(boxes:List[Union[VOCBox, VOCCoor]], image:np.ndarray=image, 
+                              wid:int=wid, hei:int=hei) -> List[Tuple[torch.Tensor, int]]:
+        
+        coor_feats , imgs, lbls = [], [], []
+        
+        for box in boxes:
+            xmin, ymin, xmax, ymax, lbl = box
+            coor_feat = coordinateCvt2YOLO(size=(wid, hei), 
+                                           box=(xmin, ymin, xmax, ymax))
+            coor_feats.append(torch.tensor(coor_feat))
+            imgs.append(image[ymin:ymax, xmin:xmax])    #*copy?
+            lbls.append(lbl)
+
+        words = imgs2words(imgs, return_prob=False)
+        nodes_data = []
+        for ct, word, lbl in zip(coor_feats, words, lbls):
+            word_embedding = word2vec(word)
+            node_feat = torch.cat((ct, word_embedding))
+            idx_class = class_2_idx(lbl)
+            nodes_data.append((node_feat, idx_class))
+            
+        return nodes_data
+    
+    #NOTE Desc create node data include feat and label of each node
+    nodes_data = [_create_nodes_data(line) for line in lineboxes]
+    
+    #TODO edges sẽ nối 1 box với tất cả các word 
     def _create_edges(lineboxes) :
         r"""
         tạo các edges cho graph
@@ -159,22 +189,6 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         có overlap trong phạm vi ymin:ymax
         """
     
-    def _create_node_feature(box:Union[VOCBox, VOCCoor], 
-                             image=image, wid=wid, hei=hei) -> torch.Tensor:
-        xmin, ymin, xmax, ymax = box[:4]
-        coor_embedding = coordinateCvt2YOLO(
-            size=(wid, hei), box=(xmin, ymin, xmax, ymax))
-        image_word = image[ymin:ymax, xmin:xmax]
-        word = img2word(image_word)
-        word_embedding = word2vec(word)
-        
-        return torch.cat([coor_embedding, word_embedding])    #!FIXME cvt 2 same type
-        
-    for line in lineboxes:
-        for box in line:
-            node_feature = _create_node_feature(box)
-    #TODO edges sẽ nối 1 box với tất cả các word 
-
 class DKKDGraphDataset(DGLDataset):
     def __init__(self, name:str, root:str):
         super().__init__(name='DKKD')
@@ -186,7 +200,7 @@ class DKKDGraphDataset(DGLDataset):
     def __getitem__(self, idx:int) -> DGLGraph: 
         js = self.jsons[idx]
         imgp = re.sub('.json$', '.jpg', js)
-        assert osp.isfile(imgp), 'img is not exist'
+        assert osp.isfile(imgp), '{img} is not found'.format(img=imgp)
         
         return build_graph(js, imgp)
     
