@@ -127,7 +127,7 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
     return lbls
 
 
-from vietOCR import image2word
+from vietOCR import img2word, imgs2words
 
 def word2vec(single_word:str) -> torch.Tensor:
     r"""
@@ -149,6 +149,8 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
 
     boxes = get_shape_info(jsonp)
     lineboxes = sorted_VOCbox(boxes)
+    
+    #? đưa 2 function _create_edges và _create_node_feature ra ngoài build_graph 
     def _create_edges(lineboxes) :
         r"""
         tạo các edges cho graph
@@ -163,7 +165,7 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         coor_embedding = coordinateCvt2YOLO(
             size=(wid, hei), box=(xmin, ymin, xmax, ymax))
         image_word = image[ymin:ymax, xmin:xmax]
-        word = image2word(image_word)
+        word = img2word(image_word)
         word_embedding = word2vec(word)
         
         return torch.cat([coor_embedding, word_embedding])    #!FIXME cvt 2 same type
