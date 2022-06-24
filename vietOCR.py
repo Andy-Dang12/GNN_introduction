@@ -3,7 +3,8 @@ from vietocr.tool.config import Cfg
 
 from PIL import Image
 import numpy as np
-import cv2
+from typing import List
+
 
 config = Cfg.load_config_from_name('vgg_seq2seq')
 
@@ -16,20 +17,34 @@ config['predictor']['beamsearch']=False
 detector = Predictor(config)
 
 
-def image2word(image:np.ndarray) -> str:
+def img2word(img:np.ndarray, return_prob=False) -> str:
     #! assert len(image.shape) < 3, "have to convert to gray image"
     # image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    image = Image.fromarray(image, mode="L")
-    return detector.predict(image)
+    img = Image.fromarray(img, mode="L")
+    return detector.predict(img, return_prob)
     
-    
+
+def imgs2words(imgs:List[np.ndarray], return_prob=False) -> List[str]:
+    imgs = [Image.fromarray(img, mode="L") for img in imgs]
+    return detector.predict_batch(imgs, return_prob)
+
+
 if __name__ == '__main__':
-    from time import time
-    img = 'dataset/vietOCR/13221_16.jpg'
-    img = Image.open(img)
+    from time import time    
     
-    start = time()
-    s = detector.predict(img)
-    end = time()
-    print('runtime: ', end-start)
-    print(s)
+    img1 = 'dataset/vietOCR/13221_16.jpg'
+    img2 = 'dataset/vietOCR/036200006617.jpeg'
+    # img = Image.open(img)
+    
+    # start = time()
+    # s = detector.predict(img)
+    # end = time()
+    # print('runtime: ', end-start)
+    # print(s)
+    
+    
+    # import cv2
+    # imgs = [cv2.imread(img1, 0), cv2.imread(img2, 0)]
+    # ss = imgs2words(imgs)
+    # for s in ss:
+    #     print(s)
