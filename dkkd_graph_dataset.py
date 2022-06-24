@@ -1,3 +1,4 @@
+import enum
 import os, re, json
 import os.path as osp
 # import xml.etree.ElementTree as ET
@@ -128,6 +129,13 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
     return lbls
 
 
+Node = Tuple[Number, Number, Number, Number, torch.Tensor, int, int]
+def is_edge(sbox:Node, qbox:Node):
+    #TODO so sansh 2 boxx xem cos tao edge hay k
+    return True
+
+    
+    
 def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     r"""
     from coordinate and word
@@ -155,7 +163,7 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         return torch.cat((coor_feat, word_embedding)), idx_class
     
     def _create_nodes_data(boxes:List[Union[VOCBox, VOCCoor]], image:np.ndarray=image, 
-                              wid:int=wid, hei:int=hei) -> List[Tuple[torch.Tensor, int]]:
+                              wid:int=wid, hei:int=hei) -> Tuple[List[torch.Tensor], List[int]]:
         
         coor_feats , imgs, lbls = [], [], []
         
@@ -165,29 +173,51 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
                                            box=(xmin, ymin, xmax, ymax))
             coor_feats.append(torch.tensor(coor_feat))
             imgs.append(image[ymin:ymax, xmin:xmax])    #*copy?
-            lbls.append(lbl)
+            lbls.append(class_2_idx(lbl))               #*index
 
         words = imgs2words(imgs, return_prob=False)
-        nodes_data = []
-        for ct, word, lbl in zip(coor_feats, words, lbls):
+        nodes_feats = []
+        for ct, word in zip(coor_feats, words):
             word_embedding = word2vec(word)
             node_feat = torch.cat((ct, word_embedding))
-            idx_class = class_2_idx(lbl)
-            nodes_data.append((node_feat, idx_class))
+            nodes_feats.append(node_feat)
             
-        return nodes_data
+        return nodes_feats, lbls
     
-    #NOTE Desc create node data include feat and label of each node
-    nodes_data = [_create_nodes_data(line) for line in lineboxes]
+    #NOTE create node data include feat and label of each node
+    nodes_data = [_create_nodes_data(line) for line in lineboxes]   #!FIXME
+    n_nodes = len(boxes)
     
-    #TODO edges sẽ nối 1 box với tất cả các word 
-    def _create_edges(lineboxes) :
+    def _create_edges(lineboxes=lineboxes) :
         r"""
         tạo các edges cho graph
         !TODO 1 trong cùng 1 line , 1 edge sẽ link 2 nodes cạnh nhau
         !TODO 2 đối với các box khác line, 1 edge sẽ link 2 node 
         có overlap trong phạm vi ymin:ymax
         """
+        src_node = []
+        dst_node = []
+        
+        # dùng VOCBox để tạo edge
+        Node = Tuple[Number, Number, Number, Number, torch.Tensor, int, int]
+        
+        for i, (line, nextline) in enumerate(zip(lineboxes[:-1], lineboxes[1:]), start=1):
+            for qbox in line: 
+                for sbox in nextline:
+                    if is_edge(qbox, sbox):
+                        src_node.append(qbox[-1])
+                        dst_node.append(sbox[-1])
+                    # break
+
+        return src_node, dst_node
+    
+    g = dgl.graph(*_create_edges(lineboxes), num_nodes=n_nodes)
+    g = dgl.to_bidirected(g)
+    g.ndata['feat'] = nodes_data #! FIXME
+    g.ndata['label'] = ...
+    g.ndata['train_mask'] = torch.ones(n_nodes, dtype=torch.bool)   #tất cả để train/val/test
+    g.ndata['val_mask'] = torch.ones(n_nodes, dtype=torch.bool)
+    g.ndata['test_mask'] = torch.ones(n_nodes, dtype=torch.bool)
     
 class DKKDGraphDataset(DGLDataset):
     def __init__(self, name:str, root:str):
