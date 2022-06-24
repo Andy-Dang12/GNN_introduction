@@ -3,7 +3,7 @@ from vietocr.tool.config import Cfg
 
 from PIL import Image
 import numpy as np
-from typing import List
+from typing import List, Iterator
 
 
 config = Cfg.load_config_from_name('vgg_seq2seq')
@@ -24,7 +24,7 @@ def img2word(img:np.ndarray, return_prob=False) -> str:
     return detector.predict(img, return_prob)
     
 
-def imgs2words(imgs:List[np.ndarray], return_prob=False) -> List[str]:
+def imgs2words(imgs:Iterator[np.ndarray], return_prob=False) -> List[str]:
     imgs = [Image.fromarray(img, mode="L") for img in imgs]
     return detector.predict_batch(imgs, return_prob)
 
