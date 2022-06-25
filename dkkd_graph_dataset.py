@@ -242,18 +242,23 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
                         dst_node.append(idx_dst)
         
         # NOTE tạo edges giữa 2 box liên tiếp trong cùng 1 dòng/line
-        for linebox, lineIDX in zip(lineboxes, nodes_idx):
-            #TODO tạo các edges nối các box trong cùng 1 line
-            numbox = len(linebox)
-            if numbox == 1:
-                break
+        assert len(lineboxes) == len(nodes_idx), 'len(lineboxes) != len(nodes_idx)'
+        # for linebox, lineIDX in zip(lineboxes, nodes_idx):
+            # assert len(linebox) == len(lineIDX), 'len(linebox) != len(lineIDX)'
+        for lineIDX in nodes_idx:
+            # tạm thời ko dùng tọa độ của box trong linebox
+            # nếu tạo thêm edge và cần thress thì dùng thêm linebox
+            numbox = len(lineIDX)
+            if numbox >= 3:
+                for idx, nextidx in zip(lineIDX[:-1], lineIDX[:1]):
+                    src_node.append(idx)
+                    dst_node.append(nextidx)
             elif numbox == 2:
-                src_node.append()
-                dst_node.append()
-            else:
-                for box, nextbox in zip(linebox[:-1], linebox[:1]):
-                    
-                    ...
+                src_node.append(lineIDX[0])
+                dst_node.append(lineIDX[-1])
+            # if numbox <= 1:
+            #     continue
+            
         return src_node, dst_node
     
         #     for box_src, idx_src, box_dst, idx_dst in zip(
