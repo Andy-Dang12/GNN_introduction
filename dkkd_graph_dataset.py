@@ -90,7 +90,7 @@ def get_shape_info(jsonp:str) -> List[VOCBox]:
         ymax = points[:, 1].max()
         boxes.append((xmin, ymin, xmax, ymax, lbl))
     return boxes
-    return sorted_VOCbox(boxes)
+    # return sorted_VOCbox(boxes)
 
 
 def coordinateCvt2YOLO(size:Tuple[int, int], box:VOCCoor) -> YOLOCoor:
@@ -130,9 +130,9 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
 
 
 def is_edge(box_src, box_dst, thress=1.0):
-    #TODO so sansh 2 boxx xem cos tao edge hay k
-    xminS, _, xmaxS, __ = box_src[:4]
-    xminD, _, xmaxD, __ = box_dst[:4]
+    #NOTE so sánh 2 box xem có tạo edge hay k
+    xminS, _, xmaxS = box_src[:3]
+    xminD, _, xmaxD = box_dst[:3]
     
     if xminS <= xminD <= xmaxS or xminS <= xmaxD <= xmaxS:
         return True 
@@ -147,8 +147,9 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     image = cv2.imread(imgp, 0)
     hei, wid = image.shape
 
-    boxes = get_shape_info(jsonp)
+    boxes    = get_shape_info(jsonp)
     lineboxes = sorted_VOCbox(boxes)
+    n_nodes  = len(boxes)
     
     #? đưa 2 function _create_edges và _create_node_feature ra ngoài build_graph 
     
@@ -168,7 +169,11 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     
     def _create_nodes_data(boxes:List[Union[VOCBox, VOCCoor]], image:np.ndarray=image, 
                            wid:int=wid, hei:int=hei) -> Tuple[List[torch.Tensor], List[int]]:
-        
+        r"""
+        input 1 dòng gồm nhiều box
+        output data(node feature và index_class) của từng box trong dòng đó
+        tận dụng predict_batch để tăng performance, mỗi box trong dòng là 1 batch
+        """
         coor_feats , imgs, lbls = [], [], []
         
         for box in boxes:
@@ -189,34 +194,76 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         return nodes_feats, lbls
     
     #NOTE create node data include feat and label of each node
-    nodes_feats = []
+    nodes_feats ,lbls, nodes_idx = [], [], [], []
+    start_idx = 0
     for line in lineboxes:
-        ...
-    nodes_feats, lbls = [_create_nodes_data(line) for line in lineboxes]   #!FIXME
-    n_nodes = len(boxes)
-    
-    def _create_edges(lineboxes=lineboxes) :
+        _nodes_feats, _lbls = _create_nodes_data(line)
+        nodes_feats.append(_nodes_feats)
+        lbls.append(_lbls)
+
+        #NOTE tạo 1 tuple để lưu index của nodes
+        stop_idx = start_idx + len(_lbls)
+        nodes_idx.append(
+            tuple(range(start_idx, stop_idx)))
+        start_idx = stop_idx
+        
+        
+    def _create_edges(lineboxes:List[List[VOCBox]], 
+                      nodes_idx:List[tuple[int, ...]]
+                      ) -> tuple[list, list]:
         r"""
+        input: tọa độ các box và node index
         tạo các edges cho graph
         !TODO 1 trong cùng 1 line , 1 edge sẽ link 2 nodes cạnh nhau
         !TODO 2 đối với các box khác line, 1 edge sẽ link 2 node 
         có overlap trong phạm vi ymin:ymax
         """
+        #NOTE code test
+        assert len(lineboxes) == len(nodes_idx), 'thiếu dòng'
+        for linebox, lineIDX in zip(lineboxes, nodes_idx):
+            assert len(linebox) == len(lineIDX), 'độ dài dòng khác nhau, thiếu box'
+        
         src_node = []
         dst_node = []
         
-        for i, (line, nextline) in enumerate(zip(lineboxes[:-1], lineboxes[1:]), start=1):
-            for qbox in line: 
-                for sbox in nextline:
-                    if is_edge(qbox, sbox):
-                        src_node.append(qbox[-1])
-                        dst_node.append(sbox[-1])
-                    # break
-
+        for linebox,        lineIDX,        nextlinebox,    nextlineIDX in zip(
+            lineboxes[:-1], nodes_idx[:-1], lineboxes[ 1:], nodes_idx[ 1:]):
+            #src node                       #dst node
+            for box_src, idx_src in zip(linebox, lineIDX):
+                for box_dst, idx_dst in zip(nextlinebox, nextlineIDX):
+                    if is_edge(box_src, box_dst):
+                        src_node.append(idx_src)
+                        dst_node.append(idx_dst)
+                        
         return src_node, dst_node
     
-    g = dgl.graph(*_create_edges(lineboxes), num_nodes=n_nodes)
+        #     for box_src, idx_src, box_dst, idx_dst in zip(
+        #         linebox, lineIDX, nextlinebox, nextlineIDX):
+        #         if is_edge(box_src, box_dst):
+        #             src_node.append(idx_src)
+        #             dst_node.append(idx_dst)
+
+        
+        # for line, nextline in zip(lineboxes[:-1], lineboxes[1:]):
+        #     for qbox in line: 
+        #         for sbox in nextline: 
+        #             if is_edge(qbox, sbox):
+        #                 src_node.append(qbox[-1])
+        #                 dst_node.append(sbox[-1])
+        #             break
+
+    
+    
+    #CODE TEST
+    c = 0
+    for line in lineboxes:
+        c+= len(line)
+    assert c <= n_nodes, 'check lại số lượng node'
+    
+    src_node, dst_node = _create_edges(lineboxes, nodes_idx) # xác đinh edge of graph
+    g = dgl.graph((src_node, dst_node), num_nodes=n_nodes)
     g = dgl.to_bidirected(g)
+    
     g.ndata['feat'] = ... #! FIXME
     g.ndata['label'] = ...
     g.ndata['train_mask'] = torch.ones(n_nodes, dtype=torch.bool)   #tất cả để train/val/test
