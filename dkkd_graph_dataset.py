@@ -129,7 +129,7 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
     return lbls
 
 
-def is_edge(box_src, box_dst, thress=1.0):
+def is_edge_diff_line(box_src, box_dst, thress=1.0):
     #NOTE so sánh 2 box xem có tạo edge hay k
     xminS, _, xmaxS = box_src[:3]
     xminD, _, xmaxD = box_dst[:3]
@@ -139,6 +139,11 @@ def is_edge(box_src, box_dst, thress=1.0):
     else:
         return False
 
+def is_edge_same_line(box_src, box_dst, thress=1.0):
+    xminS, _, xmaxS = box_src[:3]
+    xminD, _, xmaxD = box_dst[:3]
+    
+    return
 
 def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     r"""
@@ -226,15 +231,29 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         src_node = []
         dst_node = []
         
+        # NOTE tạo edges giữa 2 box khác dòng/line
         for linebox,        lineIDX,        nextlinebox,    nextlineIDX in zip(
             lineboxes[:-1], nodes_idx[:-1], lineboxes[ 1:], nodes_idx[ 1:]):
             #src node                       #dst node
             for box_src, idx_src in zip(linebox, lineIDX):
                 for box_dst, idx_dst in zip(nextlinebox, nextlineIDX):
-                    if is_edge(box_src, box_dst):
+                    if is_edge_diff_line(box_src, box_dst):
                         src_node.append(idx_src)
                         dst_node.append(idx_dst)
-                        
+        
+        # NOTE tạo edges giữa 2 box liên tiếp trong cùng 1 dòng/line
+        for linebox, lineIDX in zip(lineboxes, nodes_idx):
+            #TODO tạo các edges nối các box trong cùng 1 line
+            numbox = len(linebox)
+            if numbox == 1:
+                break
+            elif numbox == 2:
+                src_node.append()
+                dst_node.append()
+            else:
+                for box, nextbox in zip(linebox[:-1], linebox[:1]):
+                    
+                    ...
         return src_node, dst_node
     
         #     for box_src, idx_src, box_dst, idx_dst in zip(
@@ -251,16 +270,15 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         #                 src_node.append(qbox[-1])
         #                 dst_node.append(sbox[-1])
         #             break
-
-    
-    
+        
     #CODE TEST
     c = 0
     for line in lineboxes:
         c+= len(line)
     assert c <= n_nodes, 'check lại số lượng node'
     
-    src_node, dst_node = _create_edges(lineboxes, nodes_idx) # xác đinh edge of graph
+    # NOTE DGL Graph Construction
+    src_node, dst_node = _create_edges(lineboxes, nodes_idx)
     g = dgl.graph((src_node, dst_node), num_nodes=n_nodes)
     g = dgl.to_bidirected(g)
     
