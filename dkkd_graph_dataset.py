@@ -129,13 +129,17 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
     return lbls
 
 
-Node = Tuple[Number, Number, Number, Number, torch.Tensor, int, int]
-def is_edge(sbox:Node, qbox:Node):
+def is_edge(box_src, box_dst, thress=1.0):
     #TODO so sansh 2 boxx xem cos tao edge hay k
-    return True
+    xminS, _, xmaxS, __ = box_src[:4]
+    xminD, _, xmaxD, __ = box_dst[:4]
+    
+    if xminS <= xminD <= xmaxS or xminS <= xmaxD <= xmaxS:
+        return True 
+    else:
+        return False
 
-    
-    
+
 def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     r"""
     from coordinate and word
@@ -163,7 +167,7 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         return torch.cat((coor_feat, word_embedding)), idx_class
     
     def _create_nodes_data(boxes:List[Union[VOCBox, VOCCoor]], image:np.ndarray=image, 
-                              wid:int=wid, hei:int=hei) -> Tuple[List[torch.Tensor], List[int]]:
+                           wid:int=wid, hei:int=hei) -> Tuple[List[torch.Tensor], List[int]]:
         
         coor_feats , imgs, lbls = [], [], []
         
@@ -185,7 +189,10 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         return nodes_feats, lbls
     
     #NOTE create node data include feat and label of each node
-    nodes_data = [_create_nodes_data(line) for line in lineboxes]   #!FIXME
+    nodes_feats = []
+    for line in lineboxes:
+        ...
+    nodes_feats, lbls = [_create_nodes_data(line) for line in lineboxes]   #!FIXME
     n_nodes = len(boxes)
     
     def _create_edges(lineboxes=lineboxes) :
@@ -197,9 +204,6 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         """
         src_node = []
         dst_node = []
-        
-        # dùng VOCBox để tạo edge
-        Node = Tuple[Number, Number, Number, Number, torch.Tensor, int, int]
         
         for i, (line, nextline) in enumerate(zip(lineboxes[:-1], lineboxes[1:]), start=1):
             for qbox in line: 
@@ -213,7 +217,7 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     
     g = dgl.graph(*_create_edges(lineboxes), num_nodes=n_nodes)
     g = dgl.to_bidirected(g)
-    g.ndata['feat'] = nodes_data #! FIXME
+    g.ndata['feat'] = ... #! FIXME
     g.ndata['label'] = ...
     g.ndata['train_mask'] = torch.ones(n_nodes, dtype=torch.bool)   #tất cả để train/val/test
     g.ndata['val_mask'] = torch.ones(n_nodes, dtype=torch.bool)
