@@ -1,8 +1,9 @@
-import enum
 import os, re, json
 import os.path as osp
+from itertools import chain
 # import xml.etree.ElementTree as ET
 from glob import glob
+from turtle import end_fill
 from typing import Dict, List, Optional, Tuple, Union
 # from xml.dom.minidom import parseString
 # from xml.dom.expatbuilder import parseString
@@ -128,6 +129,36 @@ def from_labelme2yolo(jsonp:str, imgp:str) -> List[YOLOBox]:
         
     return lbls
 
+def save_nodes(idx, label , nodes_path:str, 
+               feats:List[List[torch.Tensor]], feats_path:str
+               ) -> Tuple[pd.DataFrame, np.ndarray]:
+    r"""
+    save node data
+    index save trong file .csv
+    node feature save trong file .npz
+    """
+    assert nodes_path.endswith('.csv'), 'save node data ở dạng .csv'
+    assert feats_path.endswith('.npz'), 'save node feat ở dạng .npz'
+    
+    node = pd.DataFrame({'Id':chain(*idx), 'label':chain(*label)})
+    node.to_csv(nodes_path, encoding='utf-8', index=False)
+    
+    feats = [tensor1D.numpy() for tensor1D in chain(*feats)]
+    feat_2D = np.stack(feats, axis=0)
+    np.save(feats_path, feat_2D)
+    
+    print("node label saved ", nodes_path)
+    print("node feat saved ", feats_path)
+    return node, feat_2D
+
+def save_edges(edges, path:str):
+    src_node, dst_node = edges
+    edges_data = pd.DataFrame(
+        {'src':src_node,
+         'dst':dst_node}
+    )
+    edges_data.to_csv(path, encoding='utf-8', index=False)
+    print('edge data saved ', path)
 
 def is_edge_diff_line(box_src, box_dst, thress=1.0):
     #NOTE so sánh 2 box xem có tạo edge hay k
@@ -186,7 +217,7 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
             coor_feat = coordinateCvt2YOLO(size=(wid, hei), 
                                            box=(xmin, ymin, xmax, ymax))
             coor_feats.append(torch.tensor(coor_feat))
-            imgs.append(image[ymin:ymax, xmin:xmax])    #*copy?
+            imgs.append(image[round(ymin):round(ymax), round(xmin):round(xmax)])    #*copy?
             lbls.append(class_2_idx(lbl))               #*index
 
         words = imgs2words(imgs, return_prob=False)
@@ -199,23 +230,30 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         return nodes_feats, lbls
     
     #NOTE create node data include feat and label of each node
-    nodes_feats ,lbls, nodes_idx = [], [], [], []
+    nodes_feats ,lbls, nodes_idx = [], [], []   # List[List]
     start_idx = 0
     for line in lineboxes:
         _nodes_feats, _lbls = _create_nodes_data(line)
-        nodes_feats.append(_nodes_feats)
-        lbls.append(_lbls)
+        nodes_feats.append(_nodes_feats)            #NOTE list of list of vector node feat
+        lbls.       append(_lbls)                   #NOTE list of list of node label
 
-        #NOTE tạo 1 tuple để lưu index của nodes
         stop_idx = start_idx + len(_lbls)
-        nodes_idx.append(
-            tuple(range(start_idx, stop_idx)))
+        nodes_idx.  append(
+            tuple(range(start_idx, stop_idx)))      #NOTE list of tuple of node index
         start_idx = stop_idx
-        
-        
+    
+    #TEST node index , check đủ số lượng node index và ko bị duplicate
+    b, c = [], 0
+    for line in nodes_idx:
+        b.extend(line)
+        c += len(line)
+    assert c           == n_nodes , 'c != n_nodes'
+    assert len(set(b)) == n_nodes , 'duplicata node index'
+    del b, c
+    
     def _create_edges(lineboxes:List[List[VOCBox]], 
-                      nodes_idx:List[tuple[int, ...]]
-                      ) -> tuple[list, list]:
+                      nodes_idx:List[Tuple[int, ...]]
+                      ) -> Tuple[list, list]:
         r"""
         input: tọa độ các box và node index
         tạo các edges cho graph
@@ -243,8 +281,8 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         
         # NOTE tạo edges giữa 2 box liên tiếp trong cùng 1 dòng/line
         assert len(lineboxes) == len(nodes_idx), 'len(lineboxes) != len(nodes_idx)'
-        # for linebox, lineIDX in zip(lineboxes, nodes_idx):
-            # assert len(linebox) == len(lineIDX), 'len(linebox) != len(lineIDX)'
+        for linebox, lineIDX in zip(lineboxes, nodes_idx):
+            assert len(linebox) == len(lineIDX), 'len(linebox) != len(lineIDX)'
         for lineIDX in nodes_idx:
             # tạm thời ko dùng tọa độ của box trong linebox
             # nếu tạo thêm edge và cần thress thì dùng thêm linebox
@@ -266,7 +304,6 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         #         if is_edge(box_src, box_dst):
         #             src_node.append(idx_src)
         #             dst_node.append(idx_dst)
-
         
         # for line, nextline in zip(lineboxes[:-1], lineboxes[1:]):
         #     for qbox in line: 
@@ -275,24 +312,26 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         #                 src_node.append(qbox[-1])
         #                 dst_node.append(sbox[-1])
         #             break
-        
-    #CODE TEST
-    c = 0
-    for line in lineboxes:
-        c+= len(line)
-    assert c <= n_nodes, 'check lại số lượng node'
     
-    # NOTE DGL Graph Construction
     src_node, dst_node = _create_edges(lineboxes, nodes_idx)
-    g = dgl.graph((src_node, dst_node), num_nodes=n_nodes)
-    g = dgl.to_bidirected(g)
+    # NOTE save graph as csv and npz
     
-    g.ndata['feat'] = ... #! FIXME
-    g.ndata['label'] = ...
-    g.ndata['train_mask'] = torch.ones(n_nodes, dtype=torch.bool)   #tất cả để train/val/test
-    g.ndata['val_mask'] = torch.ones(n_nodes, dtype=torch.bool)
-    g.ndata['test_mask'] = torch.ones(n_nodes, dtype=torch.bool)
+    name_save = osp.join('dataset/graph_DKKD', osp.basename(js))
+    save_nodes(nodes_idx, lbls, re.sub('.json$', '.idx.csv', name_save),
+               nodes_feats, re.sub('.json$', '.nfeat.npz', name_save))
+    save_edges((src_node, dst_node), re.sub('.json$', '.edges.csv', name_save))
     
+    # # NOTE DGL Graph Construction
+    # g = dgl.graph((src_node, dst_node), num_nodes=n_nodes)
+    # g = dgl.to_bidirected(g)
+    
+    # g.ndata['feat'] = ... #! FIXME
+    # g.ndata['label'] = ...
+    # g.ndata['train_mask'] = torch.ones(n_nodes, dtype=torch.bool)   #tất cả để train/val/test
+    # g.ndata['val_mask'] = torch.ones(n_nodes, dtype=torch.bool)
+    # g.ndata['test_mask'] = torch.ones(n_nodes, dtype=torch.bool)
+    
+
 class DKKDGraphDataset(DGLDataset):
     def __init__(self, name:str, root:str):
         super().__init__(name='DKKD')
@@ -349,4 +388,16 @@ class DKKDGraphDataset(DGLDataset):
         self.graph.ndata['val_mask'] = val_mask
         self.graph.ndata['test_mask'] = test_mask
         
+
+if __name__ == '__main__':
+    from colorama import Fore
+    inp = '/home/agent/Documents/graph/GNN/dataset/DKKD'
+    out = 'dataset/graph_DKKD'
+    
+    jsons = glob(osp.join(inp, '*.json'))
+    for js in jsons:
+        imgp = re.sub('.json$', '.jpg', js)
+        print(Fore.LIGHTGREEN_EX)
+        print(js, Fore.RESET)
         
+        build_graph(js, imgp)
