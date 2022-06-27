@@ -131,3 +131,4 @@ dataset/**/*.json
 dataset/**/*.jp*g
 dataset/**/*.xml
 dataset/**/*.csv
+dataset/**/*.np*
