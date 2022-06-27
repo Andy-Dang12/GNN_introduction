@@ -1,13 +1,13 @@
 import os, re, json
 import os.path as osp
-from itertools import chain
-# import xml.etree.ElementTree as ET
+from time import time
 from glob import glob
-from turtle import end_fill
+from colorama import Fore
+from itertools import chain
 from typing import Dict, List, Optional, Tuple, Union
+# import xml.etree.ElementTree as ET
 # from xml.dom.minidom import parseString
 # from xml.dom.expatbuilder import parseString
-from colorama import Fore
 import cv2
 import numpy as np
 import pandas as pd
@@ -135,10 +135,10 @@ def save_nodes(idx, label , nodes_path:str,
     r"""
     save node data
     index save trong file .csv
-    node feature save trong file .npz
+    node feature save trong file .npy
     """
     assert nodes_path.endswith('.csv'), 'save node data ở dạng .csv'
-    assert feats_path.endswith('.npz'), 'save node feat ở dạng .npz'
+    assert feats_path.endswith('.npy'), 'save node feat ở dạng .npy'
     
     node = pd.DataFrame({'Id':chain(*idx), 'label':chain(*label)})
     node.to_csv(nodes_path, encoding='utf-8', index=False)
@@ -316,10 +316,10 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     src_node, dst_node = _create_edges(lineboxes, nodes_idx)
     # NOTE save graph as csv and npz
     
-    name_save = osp.join('dataset/graph_DKKD', osp.basename(js))
-    save_nodes(nodes_idx, lbls, re.sub('.json$', '.idx.csv', name_save),
-               nodes_feats, re.sub('.json$', '.nfeat.npz', name_save))
+    name_save = osp.join('dataset/DKKD_graph', osp.basename(js))
     save_edges((src_node, dst_node), re.sub('.json$', '.edges.csv', name_save))
+    save_nodes(nodes_idx, lbls, re.sub('.json$', '.idx.csv', name_save),
+               nodes_feats, re.sub('.json$', '.nfeat.npy', name_save))
     
     # # NOTE DGL Graph Construction
     # g = dgl.graph((src_node, dst_node), num_nodes=n_nodes)
@@ -390,14 +390,16 @@ class DKKDGraphDataset(DGLDataset):
         
 
 if __name__ == '__main__':
-    from colorama import Fore
     inp = '/home/agent/Documents/graph/GNN/dataset/DKKD'
     out = 'dataset/graph_DKKD'
     
     jsons = glob(osp.join(inp, '*.json'))
+    start = time()
     for js in jsons:
         imgp = re.sub('.json$', '.jpg', js)
         print(Fore.LIGHTGREEN_EX)
         print(js, Fore.RESET)
         
         build_graph(js, imgp)
+    end = time()
+    print(Fore.MAGENTA, 'runtime: ', end-start) #782.7624568939209
