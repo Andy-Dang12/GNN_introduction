@@ -33,14 +33,18 @@ def create_cls_to_idx(label_path:str) -> Tuple[list, Dict[str, int]]:
     assert label_path.endswith('.txt')
     with open(label_path, 'r') as f:
         lines = f.read().strip().splitlines()
-    classes = [l for l in lines if l not in labels]
+    classes = sorted([l for l in lines if l not in labels])
+    
+    with open(label_path, 'w') as f:
+        f.write('\n'.join(labels + classes))
+        
     class_to_idx = {cls_name: i for i, cls_name in enumerate(classes)}
     return classes, class_to_idx
 
 classes, class_to_idx = create_cls_to_idx('dataset/DKKD/labels.txt')
 
 def class_2_idx(classname:str):
-    assert classname in class_to_idx.keys(), 'invalid classname'
+    assert classname in class_to_idx.keys(), 'invalid classname: ' + Fore.RED + classname
     return class_to_idx[classname]
 
 
@@ -280,9 +284,6 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
                         dst_node.append(idx_dst)
         
         # NOTE tạo edges giữa 2 box liên tiếp trong cùng 1 dòng/line
-        assert len(lineboxes) == len(nodes_idx), 'len(lineboxes) != len(nodes_idx)'
-        for linebox, lineIDX in zip(lineboxes, nodes_idx):
-            assert len(linebox) == len(lineIDX), 'len(linebox) != len(lineIDX)'
         for lineIDX in nodes_idx:
             # tạm thời ko dùng tọa độ của box trong linebox
             # nếu tạo thêm edge và cần thress thì dùng thêm linebox
@@ -313,7 +314,30 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         #                 dst_node.append(sbox[-1])
         #             break
     
-    src_node, dst_node = _create_edges(lineboxes, nodes_idx)
+    def _create_edges_oneline(nodes_idx:List[Tuple[int, ...]]
+                              ) -> Tuple[List[int], List[int]]:
+        r"""
+        tạo cạnh nối 2 node có index liên tiếp
+        từ đầu dòng đến cuối dòng , cuối dòng trên nối với đầu dòng dưới
+        """
+        #NOTE code test
+        assert len(lineboxes) == len(nodes_idx), 'thiếu dòng'
+        for linebox, lineIDX in zip(lineboxes, nodes_idx):
+            assert len(linebox) == len(lineIDX), 'độ dài dòng khác nhau, thiếu box'
+            
+        src, dst = [], []
+        for nodeidx in chain(*nodes_idx):
+            src.append(nodeidx)
+            dst.append(nodeidx + 1)
+        
+        src.pop(-1)
+        dst.pop(-1)
+        assert len(src) == len(dst)
+    
+        return src, dst
+    
+    # src_node, dst_node = _create_edges(lineboxes, nodes_idx)
+    src_node, dst_node = _create_edges_oneline(nodes_idx)
     # NOTE save graph as csv and npz
     
     name_save = osp.join('dataset/DKKD_graph', osp.basename(js))
