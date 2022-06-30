@@ -7,6 +7,10 @@ tạo node: mỗi bnb là 1 box, node feature =  phoBERT(word sau khi orc, có t
 tạo edge: sắp xếp các box trong 1 dòng theo thứ tự x tăng dần (từ trái qua phải)
 cạnh sẽ nối 2 node cạnh nhau (hoặc tất cả các node trong cùng 1 dòng đều nối nhau), chỉ tồn tại edge nối 2 node trong cùng 1 dòng
 
+## problem
+1. deal with unbalance node
+* tạo lại graph , giới hạn số lượng node, rồi gen ra graph sau
+* focal loss 
 
 ### inference
 * tạo graph, kết hợp `dkkd_create_graph.py` và  `DkkdGraphDataset.__getitem__`
