@@ -1,4 +1,4 @@
-import torch
+import torch, numpy as np
 from torch import nn,Tensor
 from torch.nn import functional as F
 from typing import Optional, Sequence
@@ -116,13 +116,14 @@ def focal_loss(alpha: Optional[Sequence] = None,
         A FocalLoss object
     """
     if alpha is not None:
-        if not isinstance(alpha, Tensor):
+        if isinstance(alpha, np.ndarray):
+            alpha = torch.from_numpy(alpha)
+        elif not isinstance(alpha, Tensor):
             alpha = torch.tensor(alpha)
         alpha = alpha.to(device=device, dtype=dtype)
 
-    fl = FocalLoss(
+    return FocalLoss(
         alpha=alpha,
         gamma=gamma,
         reduction=reduction,
         ignore_index=ignore_index)
-    return fl
