@@ -336,8 +336,27 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     
         return src, dst
     
+    def _create_edges_every_box(nodes_idx:List[Tuple[int, ...]]
+                                ) -> Tuple[List[int], List[int]]:
+        r"""
+        tạo edge nối từng box của dòng trên với từng box của dòng dưới
+        """
+        #NOTE code test
+        assert len(lineboxes) == len(nodes_idx), 'thiếu dòng'
+        for linebox, lineIDX in zip(lineboxes, nodes_idx):
+            assert len(linebox) == len(lineIDX), 'độ dài dòng khác nhau, thiếu box'
+        
+        src, dst = [], []
+        for lineIdx, nextlineIdx in zip(nodes_idx[:-1], nodes_idx[1:]):
+            for box in lineIdx:
+                for nbox in nextlineIdx:
+                    src.append(box)
+                    dst.append(nbox)
+
+        return src, dst
     # src_node, dst_node = _create_edges(lineboxes, nodes_idx)
-    src_node, dst_node = _create_edges_oneline(nodes_idx)
+    # src_node, dst_node = _create_edges_oneline(nodes_idx)
+    src_node, dst_node = _create_edges_every_box(nodes_idx)
     # NOTE save graph as csv and npz
     
     name_save = osp.join('dataset/DKKD_graph', osp.basename(js))
