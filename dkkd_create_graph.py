@@ -265,10 +265,6 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         !TODO 2 đối với các box khác line, 1 edge sẽ link 2 node 
         có overlap trong phạm vi ymin:ymax
         """
-        #NOTE code test
-        assert len(lineboxes) == len(nodes_idx), 'thiếu dòng'
-        for linebox, lineIDX in zip(lineboxes, nodes_idx):
-            assert len(linebox) == len(lineIDX), 'độ dài dòng khác nhau, thiếu box'
         
         src_node = []
         dst_node = []
@@ -320,11 +316,6 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         tạo cạnh nối 2 node có index liên tiếp
         từ đầu dòng đến cuối dòng , cuối dòng trên nối với đầu dòng dưới
         """
-        #NOTE code test
-        assert len(lineboxes) == len(nodes_idx), 'thiếu dòng'
-        for linebox, lineIDX in zip(lineboxes, nodes_idx):
-            assert len(linebox) == len(lineIDX), 'độ dài dòng khác nhau, thiếu box'
-            
         src, dst = [], []
         for nodeidx in chain(*nodes_idx):
             src.append(nodeidx)
@@ -341,11 +332,7 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         r"""
         tạo edge nối từng box của dòng trên với từng box của dòng dưới
         """
-        #NOTE code test
-        assert len(lineboxes) == len(nodes_idx), 'thiếu dòng'
-        for linebox, lineIDX in zip(lineboxes, nodes_idx):
-            assert len(linebox) == len(lineIDX), 'độ dài dòng khác nhau, thiếu box'
-        
+
         src, dst = [], []
         for lineIdx, nextlineIdx in zip(nodes_idx[:-1], nodes_idx[1:]):
             for box in lineIdx:
@@ -354,6 +341,21 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
                     dst.append(nbox)
 
         return src, dst
+    
+    def _create_edges_step_box(nodes_idx:List[Tuple[int, ...]]
+                                ) -> Tuple[List[int], List[int]]:
+        src, dst = [], []
+        for first_L, second_L, thirt_L in zip(
+            nodes_idx[:-2], nodes_idx[1:-1], nodes_idx[2:]):
+            ...
+        
+        return src, dst
+    
+    #NOTE code test
+    assert len(lineboxes) == len(nodes_idx), 'thiếu dòng'
+    for linebox, lineIDX in zip(lineboxes, nodes_idx):
+        assert len(linebox) == len(lineIDX), 'độ dài dòng khác nhau, thiếu box'
+        
     # src_node, dst_node = _create_edges(lineboxes, nodes_idx)
     # src_node, dst_node = _create_edges_oneline(nodes_idx)
     src_node, dst_node = _create_edges_every_box(nodes_idx)
@@ -364,73 +366,6 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     save_nodes(nodes_idx, lbls, re.sub('.json$', '.idx.csv', name_save),
                nodes_feats, re.sub('.json$', '.nfeat.npy', name_save))
     
-    # # NOTE DGL Graph Construction
-    # g = dgl.graph((src_node, dst_node), num_nodes=n_nodes)
-    # g = dgl.to_bidirected(g)
-    
-    # g.ndata['feat'] = ... #! FIXME
-    # g.ndata['label'] = ...
-    # g.ndata['train_mask'] = torch.ones(n_nodes, dtype=torch.bool)   #tất cả để train/val/test
-    # g.ndata['val_mask'] = torch.ones(n_nodes, dtype=torch.bool)
-    # g.ndata['test_mask'] = torch.ones(n_nodes, dtype=torch.bool)
-    
-
-class DKKDGraphDataset(DGLDataset):
-    def __init__(self, name:str, root:str):
-        super().__init__(name='DKKD')
-        self.jsons = glob(osp.join(root, '*.json'))
-        
-    def __len__(self): 
-        return len(self.jsons)
-    
-    def __getitem__(self, idx:int) -> DGLGraph: 
-        js = self.jsons[idx]
-        imgp = re.sub('.json$', '.jpg', js)
-        assert osp.isfile(imgp), '{img} is not found'.format(img=imgp)
-        
-        return build_graph(js, imgp)
-    
-    def process(self):
-        #NOTE dataset gồm nhiều graph, mỗi ảnh sẽ tạo thành 1 graph
-
-        #NOTE download data
-        # urlretrieve('https://data.dgl.ai/tutorial/dataset/members.csv', './members.csv')
-        # urlretrieve('https://data.dgl.ai/tutorial/dataset/interactions.csv', './interactions.csv')
-        nodes_data = pd.read_csv('dataset/Karate_Club/members.csv')
-        edges_data = pd.read_csv('dataset/Karate_Club/interactions.csv')
-        n_nodes  = nodes_data.shape[0]
-        
-        node_labels  = torch.tensor(nodes_data['Club'].astype('category').cat.codes.to_list())
-        node_features = torch.from_numpy(nodes_data['Age'].to_numpy()).reshape(n_nodes, 1)
-        edge_features = torch.from_numpy(edges_data['Weight'].to_numpy())
-        edges_src = torch.from_numpy(edges_data['Src'].to_numpy())
-        edges_dst = torch.from_numpy(edges_data['Dst'].to_numpy())
-        
-        #NOTE create graph with nodes and edges feature
-        self.graph = dgl.graph((edges_src, edges_dst), num_nodes=n_nodes)
-        self.graph = dgl.to_bidirected(self.graph)      # convert to undirected
-        self.graph.ndata['feat'] = node_features        #NOTE learnable
-        self.graph.ndata['label'] = node_labels
-        self.graph.ndata['node_features'] = nn.Parameter(torch.randn(self.graph.num_nodes(), 10))
-
-        self.graph.edata['weight'] = edge_features
-
-        #NOTE If your dataset is a node classification dataset, 
-        #! you will need to assign masks indicating whether 
-        #! a node belongs to training, validation, and test set.
-
-        n_train = int(n_nodes * 0.6)
-        n_val  = int(n_nodes * 0.2)
-        train_mask = torch.zeros(n_nodes, dtype=torch.bool)
-        val_mask  = torch.zeros(n_nodes, dtype=torch.bool)
-        test_mask  = torch.zeros(n_nodes, dtype=torch.bool)
-        train_mask[:n_train] = True
-        val_mask[n_train:n_train + n_val] = True
-        test_mask[n_train + n_val:] = True
-        self.graph.ndata['train_mask'] = train_mask
-        self.graph.ndata['val_mask'] = val_mask
-        self.graph.ndata['test_mask'] = test_mask
-        
 
 if __name__ == '__main__':
     inp = '/home/agent/Documents/graph/GNN/dataset/DKKD'
