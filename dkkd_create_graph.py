@@ -344,6 +344,7 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
     
     def _create_edges_step_box(nodes_idx:List[Tuple[int, ...]]
                                 ) -> Tuple[List[int], List[int]]:
+        raise NotImplementedError('chưa implement tạo edges theo pp này')
         src, dst = [], []
         for first_L, second_L, thirt_L in zip(
             nodes_idx[:-2], nodes_idx[1:-1], nodes_idx[2:]):
@@ -358,7 +359,9 @@ def build_graph(jsonp:str, imgp:str) -> DGLGraph:
         
     # src_node, dst_node = _create_edges(lineboxes, nodes_idx)
     # src_node, dst_node = _create_edges_oneline(nodes_idx)
-    src_node, dst_node = _create_edges_every_box(nodes_idx)
+    src_node, dst_node = _create_edges_every_box(nodes_idx)     #TODO
+    # src_node, dst_node = _create_edges_step_box(nodes_idx)
+    
     # NOTE save graph as csv and npz
     
     name_save = osp.join('dataset/DKKD_graph', osp.basename(js))
