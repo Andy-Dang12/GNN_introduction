@@ -15,11 +15,11 @@ class SAGEConv(nn.Module):
         Output feature size.
     """
     
-    def __init__(self, in_feat:int, out_feat:int, p:float=0.5):
+    def __init__(self, in_feat:int, out_feat:int, p:float=0.05):
         super(SAGEConv, self).__init__()
         # A linear submodule for projecting the input and neighbor feature to the output.
         self.linear = nn.Linear(in_feat * 2, out_feat)
-        self.dropout = nn.Dropout(p=0.4)
+        self.dropout = nn.Dropout(p=p)
         
     def forward(self, g, h):
         """Forward computation
@@ -46,11 +46,11 @@ class SAGEConv(nn.Module):
 
 
 class GraphSAGE(nn.Module):
-    def __init__(self, in_feats, h_feats_1, h_feats_2, num_classes):
+    def __init__(self, in_feats, h_feats_1, h_feats_2, p, num_classes):
         super(GraphSAGE, self).__init__()
-        self.conv1 = SAGEConv(in_feats, h_feats_1)
-        self.conv2 = SAGEConv(h_feats_1, h_feats_2)
-        self.conv3 = SAGEConv(h_feats_2, num_classes)
+        self.conv1 = SAGEConv(in_feats, h_feats_1, p)
+        self.conv2 = SAGEConv(h_feats_1, h_feats_2, p)
+        self.conv3 = SAGEConv(h_feats_2, num_classes, p)
         
 
     def forward(self, g, in_feat):
