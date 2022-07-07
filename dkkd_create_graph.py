@@ -1,25 +1,24 @@
-import os, re, json
-import os.path as osp
-from time import time
+import json
+import os, os.path as osp
+import re
 from glob import glob
-from colorama import Fore
 from itertools import chain
-from typing import Dict, List, Optional, Tuple, Union
+from time import time
+from typing import Dict, List, Tuple, Union
+
 # import xml.etree.ElementTree as ET
 # from xml.dom.minidom import parseString
 # from xml.dom.expatbuilder import parseString
 import cv2
 import numpy as np
 import pandas as pd
-import torch, dgl
-import torch.nn as nn
+import torch
 
-from dgl.data import DGLDataset
+from colorama import Fore
 from dgl import DGLGraph
 
-from vietOCR import img2word, imgs2words
 from phoBERT import word2vec
-
+from vietOCR import img2word, imgs2words
 
 Number = Union[int, float]
 VOCBox = Tuple[Number, Number, Number, Number, str]
@@ -148,6 +147,9 @@ def save_nodes(idx, label , nodes_path:str,
     node.to_csv(nodes_path, encoding='utf-8', index=False)
     
     feats = [tensor1D.numpy() for tensor1D in chain(*feats)]
+    assert len(tuple(chain(*label))) == len(tuple(chain(*idx))), 'n_nodes != n_feats'
+    assert len(tuple(chain(*idx))) == len(feats), 'n_nodes != n_feats'
+    
     feat_2D = np.stack(feats, axis=0)
     np.save(feats_path, feat_2D)
     
